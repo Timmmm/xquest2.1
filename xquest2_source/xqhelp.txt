@@ -1,0 +1,100 @@
+.topic NoContext=0
+ XQuest Setup ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+This program allows you to install XQuest to your hard drive, view
+the documentation, set up your soundcard for use with XQuest and
+change the controller preferences. The various menus are accessed
+by the mouse cursor or by pressing Alt-Z, where Z is the first
+letter of the menu.  For example, the "Install" menu is pulled
+down by Alt-I. Pressing Alt-X or choosing Install|Exit Setup
+will allow you to save your changes and exit the program.
+
+Press ESC to put this help screen away.
+
+.topic InstallXQuest=2
+ Install XQuest ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+This option allows you to install XQuest onto your hard drive. Enter
+the drive name and directory that you wish XQuest to be copied to.
+
+.topic ReadDocs=3
+ Read Documentation ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+This places a copy of the XQuest documentation on screen for you to 
+peruse at your leisure. You can use the arrow keys to move about in the 
+docs.
+
+  Up         Move up one line
+  Down       Move down one line
+  Right      Move right one column
+  Left       Move left one column
+  PgUp       Move one page up
+  PgDn       Move one page down
+  Home       View right most column of the file
+  End        View left most column of the file
+  Ctrl-PgUp  View top of file
+  Ctrl-PgDn  View bottom of file.
+
+.topic ExitSetup=4
+ Exit Setup ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+This exits the setup program, saving any changes made to 
+XQuest's setup. Select [Cancel] to return to the program.
+
+.topic NoneSound=5
+ No SoundCard ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+This option informs XQuest that you are one of those sad, tight-fisted 
+individuals who refuse to spend the minuscule amount of money required to 
+experience XQuest in all of its polyphonic glory.
+
+.topic SBSound=6
+ Sound Blaster ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+This option allows you to set up your SB card for use with XQuest.
+Select the appropriate values for the port, IRQ and DMA of your
+SB-compatible soundcard (Pressing Tab will move the cursor between
+the menus).
+
+If you select Autodetect, then the setup program will try to
+determine what the settings for your card should be.
+
+WARNING: the autodetection procedure may cause your computer to lock
+up if you do not have a SB-compatible soundcard or if you have
+other extension cards such as a network card. It also will not detect
+the proper DMA channel or high IRQ's. In fact, I don't really
+recommend using it at all, but since I'd written the code I thought
+I might as well use it...
+
+.topic GUSSound=7
+ Gravis UltraSound ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+This option allows you to set up your GUS card for use with XQuest.
+
+.topic Player1=8
+ Player 1 Controller ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+You can set up Player 1's preferred input device and button
+orientation in this menu.
+
+.topic Player2=9
+ Player 2 Controller ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+You can set up Player 2's preferred input device and button
+orientation in this menu.
+
+.topic PlayerOptions=10
+ Controller Options‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+Choose your preferred input device and button
+orientation in this menu.
+
+.topic MyMessage=11
+ Message Box ‹
+  ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+Read the message then click on the closure icon in the top
+left hand corner of the message box or select 'OK' to close
+the message box.
+
+
+

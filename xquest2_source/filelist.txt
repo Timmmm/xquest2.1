@@ -1,0 +1,23 @@
+The following files should be present in the XQuest v1.3 archive:
+
+FILE_ID  DIZ   Short description of XQuest.
+FILELIST TXT   This file :).
+LICENSE  DOC   Legal stuff.
+STARTPIC PBM   Title piccy.
+TITLE    PBM   Another title piccy.
+TITLE0   PBM   Return of the son of title piccy.
+XQUEST   DMO   Demo file.
+XQUEST   DOC   Documentation. READ THIS, or else!
+XQUEST   ENM   Enemy data.
+XQUEST   EXE   The game itself.
+XQUEST   FNT   A font.
+XQUEST2  FNT   Another font.
+XQUEST   GFX   Sprite data, and lots of it.
+XQUEST   ICO   A Windows icon thingy.
+XQUEST   PIF   A Windows PIF thingy.
+XQUEST   SND   The Sounds.
+
+(Total 16 files.)
+
+Please see the file LICENSE.DOC for legal and copyright information about 
+XQuest. 

@@ -1,0 +1,61 @@
+XQ Timer results (14285 us per frame...)
+
+EraseSprites
+------------
+
+21 sprites + moving gate : 1837 us, 1777us, 1864 us
+21 sprites               : 1682 us, 1661us, 1616 us
+11 sprites               : 1007 us
+11 sprites, 50 missiles  : 1740 us
+21 sprites, 50 missiles  : 2432 us
+
+
+MoveEnemies
+-----------
+
+21 grungers              : 995 us
+19 zippos (curve)        : 2667 us
+21 heatseekers (follow)  : 3477 us
+
+CheckCollisions
+---------------
+
+21 en., 15 obj           : 188 us
+21 en., 15 obj, 50 miss. : 765 us
+
+MoveShip
+--------
+
+548 us
+
+DrawSprites
+-----------
+
+21 grungers              : 4090 us
+21 grungers, 50 missiles : 5507 us
+21 meebys                : 8679 us
+21 buck, 67 emiss        : 6077 us
+
+Whole Frame
+-----------
+
+14 enemies, 8 emiss, 14 miss, 11 emines, 28 objects: 8615 us
+18 enemies, 8 emiss, 50 miss, 15 emines, 57 objects: 12822 us
+18 enemies, 12 emiss, 50 miss, 18 emines, 57 objects: 25443 us (486-8)
+
+
+33MHz:
+XPutPBM (ship backgr): av. 82.55 us = 2724 clock ticks (33 ticks/us)
+XGetPBM (ship backgr): av 169.75 us = 5602 clock ticks
+
+8 MHz:
+XPutPBM (ship backgr): av.182.63 us = 1461 clock ticks (8 ticks/us)
+XGetPBM (ship backgr): av 255.09 us = 2041 clock ticks
+
+
+Sound
+-----
+
+2000 us for SBPoll() update (70-80 us otherwise) for 4 sounds (486-33)
+This corresponds to 66,000 clock ticks to mix ca. 780 samples * 4
+  or approx. 21 clock ticks/sample. Much too high!
