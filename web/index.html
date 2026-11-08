@@ -29,6 +29,26 @@
       ["click", "keydown", "touchstart"].forEach((e) => document.addEventListener(e, resume));
     })();
   </script>
+  <script>
+    // Full screen: F11 or Alt+Enter. The whole page is the game, so
+    // making the document full screen is enough, and the game rescales itself.
+    (function () {
+      const toggle = () => {
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      };
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "F11" || (e.key === "Enter" && e.altKey)) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggle();
+        }
+      }, true);
+    })();
+  </script>
   <script type="module">
     import init from "./xquest.js";
     document.getElementById("bevy").focus();

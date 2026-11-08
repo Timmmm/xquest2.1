@@ -11,7 +11,7 @@ use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::{AccumulatedMouseMotion, MouseButtonInput};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowResized};
+use bevy::window::{CursorGrabMode, CursorOptions, MonitorSelection, PrimaryWindow, WindowMode, WindowResized};
 
 use xquest::core::game::Xq;
 use xquest::core::platform::{FRAMES_PER_SECOND, FrameExecutor, InputEvent, Shared, SharedRef};
@@ -113,7 +113,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(PreUpdate, collect_input.after(bevy::input::InputSystems))
         .add_systems(FixedUpdate, step_game)
-        .add_systems(Update, (show_frame, fit_screen, grab_mouse, exit_when_finished))
+        .add_systems(Update, (show_frame, fit_screen, grab_mouse, toggle_fullscreen, exit_when_finished))
         .run();
 }
 
@@ -226,6 +226,21 @@ fn grab_mouse(game: Res<Game>, mut cursor: Single<&mut CursorOptions>, mouse: Re
     } else if !wants && cursor.grab_mode != CursorGrabMode::None {
         cursor.grab_mode = CursorGrabMode::None;
         cursor.visible = true;
+    }
+}
+
+/// F11 toggles full screen. On the web the page itself handles this (see
+/// `web/index.html`), because browsers only allow full screen in direct response to input.
+fn toggle_fullscreen(keys: Res<ButtonInput<KeyCode>>, mut window: Single<&mut Window, With<PrimaryWindow>>) {
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::F11) {
+        window.mode = match window.mode {
+            WindowMode::Windowed => WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+            _ => WindowMode::Windowed,
+        };
     }
 }
 

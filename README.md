@@ -16,7 +16,8 @@ Web (needs the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` matching t
     ./build-web.sh
     python3 -m http.server -d web
 
-On the web, click the game to capture the mouse. The game saves its configuration, high
+On the web, click the game to capture the mouse. Press F11 to play full screen (Alt+Enter
+also works on the web). The game saves its configuration, high
 scores and recorded demos in the browser's local storage. On the desktop they are files in
 the current directory, as in the original.
 
