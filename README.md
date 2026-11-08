@@ -52,10 +52,11 @@ closely rather than reimplementing the game.
 The original `xquest.exe` was run in DOSBox and screenshots of its attract-mode demo were
 compared with the port playing the same demo (`src/bin/headless.rs`, which runs the game
 without a window). 361 of the screenshots, spread over all 12 levels of the demo and the
-game over screen, are pixel-identical to a frame of the port. The others differ only
-where the original writes directly to the page being displayed (the enemy entry gates,
-erasing explosions, the status bar), which shows up part way through a frame depending on
-the speed of the computer. `tests/demo.rs` checks the game state at several of the verified
+game over screen, are pixel-identical to a frame of the port. The other in-game
+screenshots differ only where the original writes directly to the page being displayed
+(the enemy entry gates, erasing explosions, the status bar), which shows up part way
+through a frame depending on the speed of the computer. Menu screenshots differ because the
+starfield is seeded from the clock. `tests/demo.rs` checks the game state at several of the verified
 frames.
 
     cargo run --release --bin headless -- demo out_dir 600 1200   # write frames as PPM

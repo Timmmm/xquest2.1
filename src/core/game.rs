@@ -2714,18 +2714,14 @@ impl Xq {
                 if self.kb.keypressed() {
                     if self.kb.numkeypresses(scan::ESC) > 0 && !self.recording {
                         self.clear_input_buffers(false).await;
-                        self.set_mouse_grab(false);
                         self.pause_game("QUIT?").await;
-                        self.set_mouse_grab(true);
                         self.game_over = self.kb.last_key_hit.eq_ignore_ascii_case(&b'y');
                         if self.game_over {
                             self.gi().score = 0;
                         }
                     }
                     if self.kb.numkeypresses(scan::P) > 0 {
-                        self.set_mouse_grab(false);
                         self.pause_game("PAUSE").await;
-                        self.set_mouse_grab(true);
                     }
                     if self.kb.keys[scan::EQUAL as usize] || self.kb.keys[scan::KEYPAD_PLUS as usize] {
                         self.sound_volume = (self.sound_volume + 4).min(crate::core::sound::MAX_SOUND_VOLUME);

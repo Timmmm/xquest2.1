@@ -101,3 +101,37 @@ impl Mixer {
         self.compander[index as usize]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compander_is_centred_and_scaled() {
+        let m = Mixer::new(Arc::new(vec![Vec::new()]));
+
+        // Silence maps to the middle of the 8-bit range.
+        let centre = m.compander[(COMP_SIZE / 2) as usize];
+        assert!((127..=128).contains(&centre));
+
+        // At volume 96 a full scale sample is scaled by 3/4.
+        let top = m.compander[(COMP_SIZE / 2 + 127) as usize] as i32;
+        assert!((top - 223).abs() <= 1, "{top}");
+    }
+
+    #[test]
+    fn voices_mix_and_finish() {
+        let sounds = Arc::new(vec![Vec::new(), vec![255; 4], vec![0; 2]]);
+        let mut m = Mixer::new(sounds);
+        m.set_volume(128);
+
+        m.add_sound(1);
+        m.add_sound(2);
+        let mixed: Vec<u8> = (0..5).map(|_| m.next_sample()).collect();
+
+        // 127 + (-128) cancels out, then the first sound continues alone, then silence.
+        assert_eq!(mixed[0], 127);
+        assert_eq!(mixed[2], 255);
+        assert_eq!(mixed[4], 128);
+    }
+}
