@@ -84,7 +84,9 @@ impl Vga {
         self.split_screen = true;
         self.split_offs = 0;
 
-        let split_height = PHYSICAL_HEIGHT as i32 - SPLIT_SCREEN_LINE;
+        // XLib reserves one more line than is displayed below the split ("gives a 241-line
+        // screen" in the original). The status bar fills exactly these 24 lines.
+        let split_height = PHYSICAL_HEIGHT as i32 - SPLIT_SCREEN_LINE + 1;
         self.page0_offs = split_height * BYTE_WIDTH;
         self.page1_offs = self.page0_offs + page_height * BYTE_WIDTH;
         self.visible_page_offs = self.page0_offs;

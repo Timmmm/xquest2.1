@@ -624,6 +624,12 @@ impl Xq {
         self.poll_input();
     }
 
+    /// `XPageFlip`: shows the hidden page and waits for the vertical retrace.
+    pub async fn xpage_flip(&mut self) {
+        self.vga.page_flip(self.visible_page_x, self.visible_page_y);
+        self.vsync().await;
+    }
+
     fn poll_input(&mut self) {
         let (events, dx, dy) = {
             let mut shared = self.shared.lock().unwrap();
@@ -892,7 +898,7 @@ impl Xq {
     // Starting a level.
     // ------------------------------------------------------------------------------------
 
-    pub fn start_new_level(&mut self) {
+    pub async fn start_new_level(&mut self) {
         self.enemy.truncate(1);
         self.num_enemy_missiles = 0;
         self.num_enemy_mines = 0;
@@ -911,7 +917,7 @@ impl Xq {
 
         self.visible_page_x = (PAGE_WIDTH - PHYSICAL_PAGE_WIDTH) / 2;
         self.visible_page_y = (lh - SPLIT_SCREEN_LINE) / 2;
-        self.vga.page_flip(self.visible_page_x, self.visible_page_y);
+        self.xpage_flip().await;
 
         let gl = self.gate[0];
         let gr = self.gate[1];
@@ -1024,7 +1030,7 @@ impl Xq {
     // ------------------------------------------------------------------------------------
 
     pub async fn give_bonus(&mut self) {
-        self.vga.page_flip(self.visible_page_x, self.visible_page_y);
+        self.xpage_flip().await;
         let vis = self.vga.visible_page_offs;
         let (ox, oy) = (self.ship.oldx, self.ship.oldy);
         let bg = self.ship.backgr.clone();
@@ -2556,7 +2562,7 @@ impl Xq {
                 pu.position = 0;
             }
             self.ship_destroyed_count = START_SHIP_DESTROYED_COUNT;
-            self.start_new_level();
+            self.start_new_level().await;
 
             if self.two_player {
                 self.text_window(&format!("{} READY", PLAYER_STR[self.player]));
@@ -2613,7 +2619,7 @@ impl Xq {
         }
 
         self.setup_new_level(self.player);
-        self.start_new_level();
+        self.start_new_level().await;
     }
 
     pub async fn game(&mut self) {
@@ -2641,7 +2647,7 @@ impl Xq {
             self.swap_objects();
         }
 
-        self.start_new_level();
+        self.start_new_level().await;
 
         if self.two_player {
             self.text_window(&format!("{} READY", PLAYER_STR[self.player]));
@@ -2699,8 +2705,7 @@ impl Xq {
                     }
                 }
 
-                self.vga.page_flip(self.visible_page_x, self.visible_page_y);
-                self.vsync().await;
+                self.xpage_flip().await;
                 self.frame_count += 1;
                 if self.game_info[self.player].timing {
                     self.gi().time_on_level += 1;
