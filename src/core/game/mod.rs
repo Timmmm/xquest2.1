@@ -23,8 +23,7 @@ use crate::core::enemies::{EnemyKind, EnemyMissileKind};
 use crate::core::input::{Buttons, KeyCode, Keyboard, Mouse};
 use crate::core::levels::{LEVELS, Level};
 use crate::core::platform::{FRAMES_PER_SECOND, GameStatus, InputEvent, SharedRef, YieldNow};
-use crate::core::rng::Rng;
-use crate::core::rng::wrap16;
+use crate::core::rng::{Rng, wrap16};
 use crate::core::settings::{PlayerSettings, Settings};
 use crate::core::sound::{Mixer, MixerRef, Sound};
 use crate::core::stars::Stars;
@@ -329,8 +328,8 @@ pub struct XQuest {
     pub mixer: MixerRef,
     pub keyboard: Keyboard,
     pub mouse: Mouse,
-    /// Video frames since the start.
-    pub frame_counter: i64,
+    /// Video frames shown since the start.
+    pub frames_shown: i64,
 
     pub settings: Settings,
     pub progress: [Progress; 2],
@@ -426,7 +425,7 @@ impl XQuest {
             mixer,
             keyboard: Keyboard::default(),
             mouse: Mouse::default(),
-            frame_counter: 0,
+            frames_shown: 0,
             settings: Settings::default(),
             progress: Default::default(),
             player: 0,
@@ -498,7 +497,7 @@ impl XQuest {
 
         YieldNow::new().await;
 
-        self.frame_counter += 1;
+        self.frames_shown += 1;
 
         let (events, motion) = {
             let mut shared = self.shared.lock().unwrap();

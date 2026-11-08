@@ -27,17 +27,17 @@ impl XQuest {
 
     /// Waits up to `count` frames for a key or mouse button. Returns whether one was pressed.
     pub async fn wait_or_input(&mut self, count: i64) -> bool {
-        let end = self.frame_counter + count;
+        let end = self.frames_shown + count;
 
         while !(self.keyboard.take_any_key()
             || self.buttons_pressed().any()
-            || self.frame_counter > end)
+            || self.frames_shown > end)
         {
             self.vsync().await;
         }
 
         self.keyboard.clear_presses();
-        self.frame_counter <= end
+        self.frames_shown <= end
     }
 
     /// Animates the starfield for one frame.
