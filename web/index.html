@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XQuest 2</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; outline: none; }
+  </style>
+</head>
+<body>
+  <canvas id="bevy" tabindex="0"></canvas>
+  <script>
+    // Browsers start audio contexts suspended until the page receives a user gesture.
+    // Keep track of every context and resume them on the first click or key press.
+    (function () {
+      const contexts = [];
+      const Original = window.AudioContext || window.webkitAudioContext;
+      if (!Original) return;
+      const Patched = function (...args) {
+        const ctx = new Original(...args);
+        contexts.push(ctx);
+        return ctx;
+      };
+      Patched.prototype = Original.prototype;
+      window.AudioContext = Patched;
+      const resume = () => contexts.forEach((c) => c.state !== "running" && c.resume());
+      ["click", "keydown", "touchstart"].forEach((e) => document.addEventListener(e, resume));
+    })();
+  </script>
+  <script type="module">
+    import init from "./xquest.js";
+    document.getElementById("bevy").focus();
+    init();
+  </script>
+</body>
+</html>
