@@ -1,41 +1,55 @@
 //! A software model of the VGA "Mode X" screen used by the original game.
 //!
-//! Video memory is modelled as four 64K planes. A pixel at `(x, y)` on a page starting at
-//! byte offset `page` lives in plane `x & 3` at address `page + y * byte_width + (x >> 2)`.
-//! Storing the planes interleaved means that address is simply
-//! `(page * 4 + y * pixel_width + x) mod 2^18`, so out of range drawing wraps around exactly
-//! as it does on real hardware.
+//! Video memory is four 64K planes. A pixel at `(x, y)` on a page starting at byte offset
+//! `page` lives in plane `x & 3` at address `page + y * BYTE_WIDTH + (x >> 2)`. Storing the
+//! planes interleaved makes that address `(page * 4 + y * LOGICAL_WIDTH + x) mod 2^18`, so
+//! drawing outside a page wraps around exactly as on real hardware.
 
-use crate::core::gfx::Bitmap;
+use crate::core::bitmap::Bitmap;
 
 pub const VRAM_SIZE: usize = 4 * 65536;
-pub const PHYSICAL_WIDTH: usize = 320;
-pub const PHYSICAL_HEIGHT: usize = 240;
+pub const SCREEN_WIDTH: usize = 320;
+pub const SCREEN_HEIGHT: usize = 240;
 
-/// Logical screen width used by the game (`PageWidth`).
+/// Width of the virtual screen in pixels.
 pub const LOGICAL_WIDTH: i32 = 392;
-pub const BYTE_WIDTH: i32 = LOGICAL_WIDTH / 4;
+const BYTE_WIDTH: i32 = LOGICAL_WIDTH / 4;
 
 /// Screen line at which the split screen (the status bar) starts.
 pub const SPLIT_SCREEN_LINE: i32 = 217;
 
-pub struct Vga {
-    pub vram: Vec<u8>,
-    /// 6-bit RGB DAC palette.
-    pub palette: [[u8; 3]; 256],
+/// 6-bit RGB DAC values.
+pub type Palette = [[u8; 3]; 256];
 
-    pub split_screen: bool,
-    pub split_offs: i32,
-    pub page0_offs: i32,
-    pub page1_offs: i32,
-    pub visible_page_offs: i32,
-    pub hidden_page_offs: i32,
-    /// `ScrnLogicalHeight`.
-    pub logical_height: i32,
+/// Which part of video memory to draw on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Page {
+    /// The page currently being displayed.
+    Visible,
+    /// The page being drawn for the next frame.
+    Hidden,
+    Page0,
+    Page1,
+    /// The status bar below the split.
+    Split,
+}
+
+pub struct Vga {
+    vram: Vec<u8>,
+    pub palette: Palette,
+
+    split_screen: bool,
+    split_offset: i32,
+    page0_offset: i32,
+    page1_offset: i32,
+    visible_offset: i32,
+    hidden_offset: i32,
+    /// Height of a page in lines.
+    pub page_height: i32,
 
     /// Display start in pixels within the visible page.
-    pub display_x: i32,
-    pub display_y: i32,
+    display_x: i32,
+    display_y: i32,
 }
 
 impl Default for Vga {
@@ -50,84 +64,104 @@ impl Vga {
             vram: vec![0; VRAM_SIZE],
             palette: [[0; 3]; 256],
             split_screen: false,
-            split_offs: 0,
-            page0_offs: 0,
-            page1_offs: 0,
-            visible_page_offs: 0,
-            hidden_page_offs: 0,
-            logical_height: 0,
+            split_offset: 0,
+            page0_offset: 0,
+            page1_offset: 0,
+            visible_offset: 0,
+            hidden_offset: 0,
+            page_height: 0,
             display_x: 0,
             display_y: 0,
         };
-        vga.set_mode_no_split_screen();
+        vga.set_single_page_mode();
         vga
     }
 
-    /// `XSetMode(XMode320x240, PageWidth)` without split screen or double buffering.
-    pub fn set_mode_no_split_screen(&mut self) {
+    /// One page covering all of video memory, no split screen. Used by the menus.
+    pub fn set_single_page_mode(&mut self) {
         self.vram.fill(0);
         self.split_screen = false;
-        self.split_offs = 0;
-        self.page0_offs = 0;
-        self.page1_offs = 0;
-        self.visible_page_offs = 0;
-        self.hidden_page_offs = 0;
-        self.logical_height = 65536 / BYTE_WIDTH;
+        self.split_offset = 0;
+        self.page0_offset = 0;
+        self.page1_offset = 0;
+        self.visible_offset = 0;
+        self.hidden_offset = 0;
+        self.page_height = 65536 / BYTE_WIDTH;
         self.display_x = 0;
         self.display_y = 0;
     }
 
-    /// `SetXMode`: mode set, split screen at line 217 and two 320 line pages.
-    pub fn set_mode_split_double_buffer(&mut self, page_height: i32) {
-        self.set_mode_no_split_screen();
+    /// Two pages of `page_height` lines for double buffering, and the status bar split
+    /// screen at line 217. Used in game.
+    pub fn set_double_buffer_mode(&mut self, page_height: i32) {
+        self.set_single_page_mode();
+
+        // One more line is reserved than is displayed below the split; the status bar fills
+        // exactly these 24 lines.
+        let split_height = SCREEN_HEIGHT as i32 - SPLIT_SCREEN_LINE + 1;
 
         self.split_screen = true;
-        self.split_offs = 0;
-
-        // XLib reserves one more line than is displayed below the split ("gives a 241-line
-        // screen" in the original). The status bar fills exactly these 24 lines.
-        let split_height = PHYSICAL_HEIGHT as i32 - SPLIT_SCREEN_LINE + 1;
-        self.page0_offs = split_height * BYTE_WIDTH;
-        self.page1_offs = self.page0_offs + page_height * BYTE_WIDTH;
-        self.visible_page_offs = self.page0_offs;
-        self.hidden_page_offs = self.page1_offs;
-        self.logical_height = page_height;
+        self.page0_offset = split_height * BYTE_WIDTH;
+        self.page1_offset = self.page0_offset + page_height * BYTE_WIDTH;
+        self.visible_offset = self.page0_offset;
+        self.hidden_offset = self.page1_offset;
+        self.page_height = page_height;
     }
 
-    /// `XPageFlip`: show the hidden page, panned to `(x, y)`.
+    /// Shows the hidden page, scrolled to `(x, y)`.
     pub fn page_flip(&mut self, x: i32, y: i32) {
-        std::mem::swap(&mut self.visible_page_offs, &mut self.hidden_page_offs);
+        std::mem::swap(&mut self.visible_offset, &mut self.hidden_offset);
         self.display_x = x;
         self.display_y = y;
     }
 
+    fn offset(&self, page: Page) -> i32 {
+        match page {
+            Page::Visible => self.visible_offset,
+            Page::Hidden => self.hidden_offset,
+            Page::Page0 => self.page0_offset,
+            Page::Page1 => self.page1_offset,
+            Page::Split => self.split_offset,
+        }
+    }
+
     #[inline]
-    fn index(page: i32, x: i32, y: i32) -> usize {
-        ((page as i64 * 4 + y as i64 * LOGICAL_WIDTH as i64 + x as i64)
+    fn index(offset: i32, x: i32, y: i32) -> usize {
+        ((offset as i64 * 4 + y as i64 * LOGICAL_WIDTH as i64 + x as i64)
             .rem_euclid(VRAM_SIZE as i64)) as usize
     }
 
     #[inline]
-    pub fn get_pix(&self, x: i32, y: i32, page: i32) -> u8 {
-        self.vram[Self::index(page, x, y)]
+    fn read(&self, offset: i32, x: i32, y: i32) -> u8 {
+        self.vram[Self::index(offset, x, y)]
     }
 
     #[inline]
-    pub fn put_pix(&mut self, x: i32, y: i32, page: i32, color: u8) {
-        self.vram[Self::index(page, x, y)] = color;
+    fn write(&mut self, offset: i32, x: i32, y: i32, color: u8) {
+        self.vram[Self::index(offset, x, y)] = color;
     }
 
-    /// `XRectFill`: fills up to but not including `(x2, y2)`.
-    pub fn rect_fill(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, page: i32, color: u8) {
+    pub fn pixel(&self, x: i32, y: i32, page: Page) -> u8 {
+        self.read(self.offset(page), x, y)
+    }
+
+    pub fn set_pixel(&mut self, x: i32, y: i32, page: Page, color: u8) {
+        self.write(self.offset(page), x, y, color);
+    }
+
+    /// Fills the rectangle from `(x1, y1)` up to but not including `(x2, y2)`.
+    pub fn fill_rect(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, page: Page, color: u8) {
+        let o = self.offset(page);
         for y in y1..y2 {
             for x in x1..x2 {
-                self.put_pix(x, y, page, color);
+                self.write(o, x, y, color);
             }
         }
     }
 
-    /// `XLine`: a Bresenham line including both end points.
-    pub fn line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, page: i32, color: u8) {
+    /// A Bresenham line including both end points.
+    pub fn line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, page: Page, color: u8) {
+        let o = self.offset(page);
         let dx = (x1 - x0).abs();
         let dy = -(y1 - y0).abs();
         let sx = if x0 < x1 { 1 } else { -1 };
@@ -136,7 +170,7 @@ impl Vga {
         let (mut x, mut y) = (x0, y0);
 
         loop {
-            self.put_pix(x, y, page, color);
+            self.write(o, x, y, color);
 
             if x == x1 && y == y1 {
                 break;
@@ -154,116 +188,105 @@ impl Vga {
         }
     }
 
-    /// `XGetPBM`: copies a `byte_width * 4` by `height` block of pixels.
-    pub fn get_pbm(&self, x: i32, y: i32, byte_width: i32, height: i32, page: i32) -> Bitmap {
-        let width = byte_width * 4;
-        let mut pixels = Vec::with_capacity((width * height) as usize);
+    /// Copies a block of the screen, `width` rounded up to a multiple of 4.
+    pub fn capture(&self, x: i32, y: i32, width: i32, height: i32, page: Page) -> Bitmap {
+        let o = self.offset(page);
+        let width = (width + 3) / 4 * 4;
+        let pixels = (0..height)
+            .flat_map(|row| (0..width).map(move |col| (col, row)))
+            .map(|(col, row)| self.read(o, x + col, y + row))
+            .collect();
 
-        for row in 0..height {
-            for col in 0..width {
-                pixels.push(self.get_pix(x + col, y + row, page));
-            }
-        }
-
-        Bitmap::new(width, byte_width, height, pixels)
+        Bitmap::new(width, height, pixels)
     }
 
-    /// `XPutPBM`: an opaque copy of the whole padded bitmap.
-    pub fn put_pbm(&mut self, x: i32, y: i32, page: i32, bm: &Bitmap) {
-        let w = bm.padded_width();
-
-        for row in 0..bm.height {
-            for col in 0..w {
-                self.put_pix(x + col, y + row, page, bm.pixels[(row * w + col) as usize]);
-            }
-        }
+    /// Draws every pixel of the (padded) bitmap, including zeros.
+    pub fn draw_opaque(&mut self, x: i32, y: i32, page: Page, bm: &Bitmap) {
+        self.draw_with(x, y, page, bm, Some);
     }
 
-    /// `XPutCBitmap`: a compiled bitmap, in which zero pixels are transparent.
-    pub fn put_cbitmap(&mut self, x: i32, y: i32, page: i32, bm: &Bitmap) {
-        let w = bm.padded_width();
+    /// Draws the bitmap with zero pixels transparent.
+    pub fn draw_transparent(&mut self, x: i32, y: i32, page: Page, bm: &Bitmap) {
+        self.draw_with(x, y, page, bm, |c| (c != 0).then_some(c));
+    }
+
+    /// Draws the (padded) bitmap opaquely, adding `tint` to every non-zero pixel.
+    pub fn draw_tinted(&mut self, x: i32, y: i32, tint: u8, page: Page, bm: &Bitmap) {
+        self.draw_with(x, y, page, bm, |c| {
+            Some(if c != 0 { c.wrapping_add(tint) } else { 0 })
+        });
+    }
+
+    /// Draws the padded bitmap; `f` maps each pixel to the colour to write, if any.
+    fn draw_with(&mut self, x: i32, y: i32, page: Page, bm: &Bitmap, f: impl Fn(u8) -> Option<u8>) {
+        let o = self.offset(page);
 
         for row in 0..bm.height {
-            for col in 0..w {
-                let c = bm.pixels[(row * w + col) as usize];
-                if c != 0 {
-                    self.put_pix(x + col, y + row, page, c);
+            for col in 0..bm.padded_width() {
+                if let Some(c) = f(bm.pixel(col, row)) {
+                    self.write(o, x + col, y + row, c);
                 }
             }
         }
     }
 
-    /// `XPutFontPBM`: opaque, with `color` added to every non-zero pixel.
-    pub fn put_font_pbm(&mut self, x: i32, y: i32, color: u8, page: i32, bm: &Bitmap) {
-        let w = bm.padded_width();
+    /// Clears a whole page to colour 0.
+    pub fn clear_page(&mut self, page: Page) {
+        self.fill_rect(0, 0, LOGICAL_WIDTH, self.page_height, page, 0);
+    }
 
-        for row in 0..bm.height {
-            for col in 0..w {
-                let c = bm.pixels[(row * w + col) as usize];
-                let c = if c != 0 { c.wrapping_add(color) } else { 0 };
-                self.put_pix(x + col, y + row, page, c);
+    /// Copies a whole page to another.
+    pub fn copy_page(&mut self, from: Page, to: Page) {
+        let (src, dst) = (self.offset(from), self.offset(to));
+        for y in 0..self.page_height {
+            for x in 0..LOGICAL_WIDTH {
+                let c = self.read(src, x, y);
+                self.write(dst, x, y, c);
             }
         }
     }
 
-    /// `XCpVidRect`: copies a rectangle between pages (end exclusive).
-    #[allow(clippy::too_many_arguments)]
-    pub fn cp_vid_rect(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, dx: i32, dy: i32, src: i32, dst: i32) {
-        for y in 0..(y2 - y1) {
-            for x in 0..(x2 - x1) {
-                let c = self.get_pix(x1 + x, y1 + y, src);
-                self.put_pix(dx + x, dy + y, dst, c);
-            }
-        }
-    }
-
-    pub fn set_rgb(&mut self, color: u8, r: u8, g: u8, b: u8) {
-        self.palette[color as usize] = [r & 63, g & 63, b & 63];
-    }
-
-    /// `XPutPalStruc`: `[first colour, count, r, g, b, ...]`.
-    pub fn put_pal_struc(&mut self, pal: &[u8]) {
-        let first = pal[0] as usize;
-        let count = pal[1] as usize;
-
-        for i in 0..count {
-            let c = first + i;
-            if c > 255 {
-                break;
-            }
-            let o = 2 + i * 3;
-            self.palette[c] = [pal[o] & 63, pal[o + 1] & 63, pal[o + 2] & 63];
-        }
-    }
-
-    /// `XPutPalRaw`.
-    pub fn put_pal_raw(&mut self, pal: &[[u8; 3]], count: usize, first: usize) {
-        for i in 0..count {
-            self.palette[first + i] = pal[i];
-        }
+    pub fn set_color(&mut self, index: u8, rgb: [u8; 3]) {
+        self.palette[index as usize] = rgb.map(|v| v & 63);
     }
 
     /// Renders what the monitor would show as 320x240 RGBA pixels.
     pub fn render_rgba(&self, out: &mut [u8]) {
-        let mut rgb = [[0u8; 4]; 256];
-        for (i, p) in self.palette.iter().enumerate() {
-            let conv = |v: u8| (v << 2) | (v >> 4);
-            rgb[i] = [conv(p[0]), conv(p[1]), conv(p[2]), 255];
-        }
+        let rgba: Vec<[u8; 4]> = self
+            .palette
+            .iter()
+            .map(|p| {
+                let c = |v: u8| (v << 2) | (v >> 4);
+                [c(p[0]), c(p[1]), c(p[2]), 255]
+            })
+            .collect();
 
-        let split_line = if self.split_screen { SPLIT_SCREEN_LINE as usize } else { PHYSICAL_HEIGHT };
+        let split_line = if self.split_screen {
+            SPLIT_SCREEN_LINE as usize
+        } else {
+            SCREEN_HEIGHT
+        };
 
-        for row in 0..PHYSICAL_HEIGHT {
-            for col in 0..PHYSICAL_WIDTH {
+        for row in 0..SCREEN_HEIGHT {
+            for col in 0..SCREEN_WIDTH {
                 let c = if row < split_line {
-                    self.get_pix(self.display_x + col as i32, self.display_y + row as i32, self.visible_page_offs)
+                    self.read(
+                        self.visible_offset,
+                        self.display_x + col as i32,
+                        self.display_y + row as i32,
+                    )
                 } else {
-                    self.get_pix(col as i32, (row - split_line) as i32, self.split_offs)
+                    self.read(self.split_offset, col as i32, (row - split_line) as i32)
                 };
 
-                let o = (row * PHYSICAL_WIDTH + col) * 4;
-                out[o..o + 4].copy_from_slice(&rgb[c as usize]);
+                let o = (row * SCREEN_WIDTH + col) * 4;
+                out[o..o + 4].copy_from_slice(&rgba[c as usize]);
             }
         }
     }
+}
+
+/// Converts an 8-bit colour component to a 6-bit DAC value.
+pub fn to_dac(v: u8) -> u8 {
+    v >> 2
 }

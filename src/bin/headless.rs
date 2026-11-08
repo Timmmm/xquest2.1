@@ -8,12 +8,13 @@
 
 use std::sync::{Arc, Mutex};
 
-use xquest::core::game::Xq;
+use xquest::core::assets;
+use xquest::core::game::XQuest;
 use xquest::core::platform::{FrameExecutor, Shared};
-use xquest::core::vga::{PHYSICAL_HEIGHT, PHYSICAL_WIDTH};
+use xquest::core::vga::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
 fn write_ppm(path: &str, rgba: &[u8]) {
-    let mut out = format!("P6\n{PHYSICAL_WIDTH} {PHYSICAL_HEIGHT}\n255\n").into_bytes();
+    let mut out = format!("P6\n{SCREEN_WIDTH} {SCREEN_HEIGHT}\n255\n").into_bytes();
     for px in rgba.chunks(4) {
         out.extend_from_slice(&px[..3]);
     }
@@ -40,13 +41,11 @@ fn main() {
     std::fs::create_dir_all(&out_dir).unwrap();
 
     let shared = Arc::new(Mutex::new(Shared::default()));
-    let mixer = Xq::new_mixer();
-    let mut xq = Xq::new(shared.clone(), mixer, 0);
+    let mixer = XQuest::new_mixer();
+    let mut xq = XQuest::new(shared.clone(), mixer, 0);
 
     let mut exec = FrameExecutor::new(async move {
-        xq.initialise_variables();
-        xq.set_demo_file("xquest.dmo");
-        xq.play_demo().await;
+        xq.play_demo(assets::builtin_demo()).await;
     });
 
     let max = frames.iter().copied().max().unwrap_or(20000);
@@ -58,10 +57,13 @@ fn main() {
         let st = s.status;
         let key = (st.total_level, st.time_on_level, st.score, st.lives);
         if last != Some(key) {
-            println!("frame {frame} level {} time {} score {} lives {} seed {:08x}", st.total_level, st.time_on_level, st.score, st.lives, st.rand_seed);
+            println!(
+                "frame {frame} level {} time {} score {} lives {} seed {:08x}",
+                st.total_level, st.time_on_level, st.score, st.lives, st.rand_seed
+            );
             last = Some(key);
         }
-        if frames.contains(&frame) || (frames.is_empty() && frame % 60 == 0) {
+        if frames.contains(&frame) || (frames.is_empty() && frame.is_multiple_of(60)) {
             write_ppm(&format!("{out_dir}/f{frame:06}.ppm"), &s.frame);
         }
         frame += 1;
@@ -69,7 +71,7 @@ fn main() {
 }
 
 fn match_references(ref_dir: &str) {
-    const PLAYFIELD: usize = 217 * PHYSICAL_WIDTH * 3;
+    const PLAYFIELD: usize = 217 * SCREEN_WIDTH * 3;
     let mut refs: Vec<(String, u64, u64)> = std::fs::read_dir(ref_dir)
         .unwrap()
         .filter_map(|e| e.ok())
@@ -78,17 +80,19 @@ fn match_references(ref_dir: &str) {
         .map(|p| {
             let d = std::fs::read(&p).unwrap();
             let top = hash(d[..PLAYFIELD].iter().copied());
-            (p.file_name().unwrap().to_string_lossy().to_string(), hash(d.into_iter()), top)
+            (
+                p.file_name().unwrap().to_string_lossy().to_string(),
+                hash(d.into_iter()),
+                top,
+            )
         })
         .collect();
     refs.sort();
 
     let shared = Arc::new(Mutex::new(Shared::default()));
-    let mut xq = Xq::new(shared.clone(), Xq::new_mixer(), 0);
+    let mut xq = XQuest::new(shared.clone(), XQuest::new_mixer(), 0);
     let mut exec = FrameExecutor::new(async move {
-        xq.initialise_variables();
-        xq.set_demo_file("xquest.dmo");
-        xq.play_demo().await;
+        xq.play_demo(assets::builtin_demo()).await;
     });
 
     let mut found = vec![None; refs.len()];
@@ -97,7 +101,11 @@ fn match_references(ref_dir: &str) {
     while exec.step() && frame < 30000 {
         let s = shared.lock().unwrap();
         let h = hash(s.frame.chunks(4).flat_map(|p| [p[0], p[1], p[2]]));
-        let top = hash(s.frame[..217 * PHYSICAL_WIDTH * 4].chunks(4).flat_map(|p| [p[0], p[1], p[2]]));
+        let top = hash(
+            s.frame[..217 * SCREEN_WIDTH * 4]
+                .chunks(4)
+                .flat_map(|p| [p[0], p[1], p[2]]),
+        );
         for (i, r) in refs.iter().enumerate() {
             if r.1 == h && found[i].is_none() {
                 found[i] = Some((frame, s.status));
@@ -118,7 +126,10 @@ fn match_references(ref_dir: &str) {
         match f {
             Some((frame, st)) => {
                 matched += 1;
-                println!("{} frame {frame} level {} time {} score {}", r.0, st.total_level, st.time_on_level, st.score);
+                println!(
+                    "{} frame {frame} level {} time {} score {}",
+                    r.0, st.total_level, st.time_on_level, st.score
+                );
             }
             None => match t {
                 Some(frame) => println!("{} playfield matches frame {frame}", r.0),
@@ -126,5 +137,8 @@ fn match_references(ref_dir: &str) {
             },
         }
     }
-    println!("{matched} of {} references matched, {matched_top} playfields matched; demo ran {frame} frames", refs.len());
+    println!(
+        "{matched} of {} references matched, {matched_top} playfields matched; demo ran {frame} frames",
+        refs.len()
+    );
 }

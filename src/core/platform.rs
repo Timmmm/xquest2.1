@@ -9,17 +9,24 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use crate::core::vga::{PHYSICAL_HEIGHT, PHYSICAL_WIDTH};
+use crate::core::input::{KeyCode, MouseButton};
+use crate::core::vga::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
 /// Video frames per second. Mode X 320x240 refreshes at 60 Hz.
 pub const FRAMES_PER_SECOND: f64 = 60.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputEvent {
-    /// A key identified by its PC scan code (set 1, with `$E0` prefixed keys plus 128).
-    Key { scan: u8, pressed: bool },
-    /// Mouse button 0 (left) or 1 (right).
-    MouseButton { button: u8, pressed: bool },
+    /// A key press or release, with the character it types.
+    Key {
+        key: KeyCode,
+        pressed: bool,
+        text: Option<char>,
+    },
+    MouseButton {
+        button: MouseButton,
+        pressed: bool,
+    },
 }
 
 pub struct Shared {
@@ -29,9 +36,8 @@ pub struct Shared {
     pub frame_serial: u64,
 
     pub events: Vec<InputEvent>,
-    /// Mouse motion since the previous frame, in mickeys.
-    pub mouse_dx: i32,
-    pub mouse_dy: i32,
+    /// Mouse motion since the previous frame.
+    pub mouse_motion: (i32, i32),
 
     /// True while the game wants relative mouse input (the cursor should be grabbed).
     pub wants_mouse_grab: bool,
@@ -54,11 +60,10 @@ pub struct GameStatus {
 impl Default for Shared {
     fn default() -> Self {
         Self {
-            frame: vec![0; PHYSICAL_WIDTH * PHYSICAL_HEIGHT * 4],
+            frame: vec![0; SCREEN_WIDTH * SCREEN_HEIGHT * 4],
             frame_serial: 0,
             events: Vec::new(),
-            mouse_dx: 0,
-            mouse_dy: 0,
+            mouse_motion: (0, 0),
             wants_mouse_grab: false,
             finished: false,
             status: GameStatus::default(),
@@ -103,7 +108,9 @@ pub struct FrameExecutor {
 
 impl FrameExecutor {
     pub fn new(future: impl Future<Output = ()> + Send + 'static) -> Self {
-        Self { future: Some(Box::pin(future)) }
+        Self {
+            future: Some(Box::pin(future)),
+        }
     }
 
     /// Advances the game by one frame. Returns false once the game has ended.

@@ -1,28 +1,110 @@
-//! A port of the Sound Blaster mixer in `sbunit.pas`.
+//! Sound effects and the mixer, which works like the original's Sound Blaster mixer.
 //!
-//! Sounds are 8-bit unsigned samples at 11025 Hz. Up to `max_sound_effects` voices are summed
-//! and converted back to 8 bits through the "compander" volume table.
+//! Sounds are 8-bit unsigned samples at 11025 Hz. Up to `max_voices` voices are summed
+//! and converted back to 8 bits through a volume ("volume_table") table.
 
 use std::sync::{Arc, Mutex};
 
 pub const MIX_SPEED: u32 = 11025;
-pub const COMPILED_MAXIMUM_SOUND_EFFECTS: i32 = 8;
-pub const COMP_SIZE: i32 = 255 * COMPILED_MAXIMUM_SOUND_EFFECTS;
-pub const MAX_SOUND_VOLUME: i32 = 128;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sound {
+    Fire6,
+    Fire5,
+    Phew,
+    Fire4,
+    Fire,
+    Boing,
+    Squelch,
+    WooHoo,
+    AllRight,
+    OhYeah,
+    GetCrystal,
+    Explosion,
+    Explosion2,
+    Explosion3,
+    Retaliate,
+    Ow,
+    Countdown,
+    Gate,
+    SuperCrystalSmash,
+    Bark,
+    Applause,
+    EnemyEnter,
+    MenuClick,
+    Doh,
+    Repulse,
+}
+
+impl Sound {
+    pub const ALL: [Sound; 25] = [
+        Sound::Fire6,
+        Sound::Fire5,
+        Sound::Phew,
+        Sound::Fire4,
+        Sound::Fire,
+        Sound::Boing,
+        Sound::Squelch,
+        Sound::WooHoo,
+        Sound::AllRight,
+        Sound::OhYeah,
+        Sound::GetCrystal,
+        Sound::Explosion,
+        Sound::Explosion2,
+        Sound::Explosion3,
+        Sound::Retaliate,
+        Sound::Ow,
+        Sound::Countdown,
+        Sound::Gate,
+        Sound::SuperCrystalSmash,
+        Sound::Bark,
+        Sound::Applause,
+        Sound::EnemyEnter,
+        Sound::MenuClick,
+        Sound::Doh,
+        Sound::Repulse,
+    ];
+
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    /// One of the three explosion sounds.
+    pub fn explosion(variant: i32) -> Sound {
+        [Sound::Explosion, Sound::Explosion2, Sound::Explosion3][variant as usize]
+    }
+
+    pub fn file_name(self) -> String {
+        let name = format!("{self:?}");
+        let mut out = String::new();
+        for (i, c) in name.chars().enumerate() {
+            if c.is_uppercase() && i > 0 {
+                out.push('_');
+            }
+            out.extend(c.to_lowercase());
+        }
+        out
+    }
+}
+
+pub const MAX_VOICES: i32 = 8;
+pub const VOLUME_TABLE_SIZE: i32 = 255 * MAX_VOICES;
+pub const MAX_VOLUME: i32 = 128;
 
 #[derive(Clone, Copy, Default)]
 struct Voice {
-    sound: usize,
+    sound: Option<Sound>,
     length: usize,
     position: usize,
 }
 
 pub struct Mixer {
+    /// Sample data indexed by [`Sound::index`].
     sounds: Arc<Vec<Vec<u8>>>,
-    /// One more slot than can be mixed, as in the original `AddSound`.
-    voices: [Voice; COMPILED_MAXIMUM_SOUND_EFFECTS as usize + 1],
-    pub max_sound_effects: i32,
-    compander: Vec<u8>,
+    /// One more voice than is mixed (see [`Mixer::play`]).
+    voices: [Voice; MAX_VOICES as usize + 1],
+    pub max_voices: i32,
+    volume_table: Vec<u8>,
 }
 
 pub type MixerRef = Arc<Mutex<Mixer>>;
@@ -31,21 +113,21 @@ impl Mixer {
     pub fn new(sounds: Arc<Vec<Vec<u8>>>) -> Self {
         let mut m = Self {
             sounds,
-            voices: [Voice::default(); COMPILED_MAXIMUM_SOUND_EFFECTS as usize + 1],
-            max_sound_effects: 4,
-            compander: vec![0; COMP_SIZE as usize],
+            voices: [Voice::default(); MAX_VOICES as usize + 1],
+            max_voices: 4,
+            volume_table: vec![0; VOLUME_TABLE_SIZE as usize],
         };
         m.set_volume(96);
         m
     }
 
-    /// `SetSBVolume`: builds the compander table in 8.8 fixed point.
+    /// Builds the volume table in 8.8 fixed point (volume 0 to 128).
     pub fn set_volume(&mut self, volume: i32) {
         let step = volume * 2;
-        let clamped = volume.min(MAX_SOUND_VOLUME);
-        let mut acc: i32 = -(COMP_SIZE / 2) * clamped * 2 + 127 * 256 + 128;
+        let clamped = volume.min(MAX_VOLUME);
+        let mut acc: i32 = -(VOLUME_TABLE_SIZE / 2) * clamped * 2 + 127 * 256 + 128;
 
-        for entry in self.compander.iter_mut() {
+        for entry in self.volume_table.iter_mut() {
             acc = acc.wrapping_add(step);
             *entry = if acc < 0 {
                 0
@@ -57,16 +139,18 @@ impl Mixer {
         }
     }
 
-    /// `AddSound`: replaces the voice with the least remaining playing time.
-    pub fn add_sound(&mut self, sound: usize) {
-        if self.max_sound_effects <= 0 {
+    /// Starts a sound on the voice with the least remaining playing time. As in the
+    /// original, one more voice is considered than is mixed, so a sound can occasionally be
+    /// silently dropped.
+    pub fn play(&mut self, sound: Sound) {
+        if self.max_voices <= 0 {
             return;
         }
 
         let mut best = 0;
         let mut least = i32::from(i16::MAX);
 
-        for i in 0..=self.max_sound_effects as usize {
+        for i in 0..=self.max_voices as usize {
             let v = &self.voices[i];
             let remaining = (v.length as i32 - v.position as i32) as i16 as i32;
             if remaining < least {
@@ -75,8 +159,12 @@ impl Mixer {
             }
         }
 
-        let length = self.sounds[sound].len();
-        self.voices[best] = Voice { sound, length, position: 0 };
+        let length = self.sounds[sound.index()].len();
+        self.voices[best] = Voice {
+            sound: Some(sound),
+            length,
+            position: 0,
+        };
     }
 
     pub fn stop_all(&mut self) {
@@ -89,16 +177,16 @@ impl Mixer {
     pub fn next_sample(&mut self) -> u8 {
         let mut mixed = 0i32;
 
-        for i in 0..self.max_sound_effects.max(0) as usize {
+        for i in 0..self.max_voices.max(0) as usize {
             let v = &mut self.voices[i];
-            if v.position < v.length {
-                mixed += self.sounds[v.sound][v.position] as i32 - 128;
+            if let Some(sound) = v.sound.filter(|_| v.position < v.length) {
+                mixed += self.sounds[sound.index()][v.position] as i32 - 128;
                 v.position += 1;
             }
         }
 
-        let index = (COMP_SIZE / 2 + mixed).clamp(0, COMP_SIZE - 1);
-        self.compander[index as usize]
+        let index = (VOLUME_TABLE_SIZE / 2 + mixed).clamp(0, VOLUME_TABLE_SIZE - 1);
+        self.volume_table[index as usize]
     }
 }
 
@@ -107,26 +195,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compander_is_centred_and_scaled() {
-        let m = Mixer::new(Arc::new(vec![Vec::new()]));
+    fn volume_table_is_centred_and_scaled() {
+        let m = Mixer::new(Arc::new(Vec::new()));
 
         // Silence maps to the middle of the 8-bit range.
-        let centre = m.compander[(COMP_SIZE / 2) as usize];
+        let centre = m.volume_table[(VOLUME_TABLE_SIZE / 2) as usize];
         assert!((127..=128).contains(&centre));
 
         // At volume 96 a full scale sample is scaled by 3/4.
-        let top = m.compander[(COMP_SIZE / 2 + 127) as usize] as i32;
+        let top = m.volume_table[(VOLUME_TABLE_SIZE / 2 + 127) as usize] as i32;
         assert!((top - 223).abs() <= 1, "{top}");
     }
 
     #[test]
     fn voices_mix_and_finish() {
-        let sounds = Arc::new(vec![Vec::new(), vec![255; 4], vec![0; 2]]);
+        let sounds = Arc::new(vec![vec![255; 4], vec![0; 2]]);
         let mut m = Mixer::new(sounds);
         m.set_volume(128);
 
-        m.add_sound(1);
-        m.add_sound(2);
+        m.play(Sound::Fire6);
+        m.play(Sound::Fire5);
         let mixed: Vec<u8> = (0..5).map(|_| m.next_sample()).collect();
 
         // 127 + (-128) cancels out, then the first sound continues alone, then silence.

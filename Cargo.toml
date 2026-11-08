@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.19.1", default-features = false, features = ["2d", "bevy_audio"] }
+bevy = { version = "0.19.1", default-features = false, features = ["2d", "bevy_audio", "serialize"] }
+png = "0.18"
+ron = "0.12"
+serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["Window", "Storage"] }

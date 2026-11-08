@@ -3,7 +3,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use xquest::core::game::Xq;
+use xquest::core::assets;
+use xquest::core::game::XQuest;
 use xquest::core::platform::{FrameExecutor, Shared};
 
 /// (frame, level, time on level, score), from matching DOSBox screenshots.
@@ -19,12 +20,10 @@ const CHECKPOINTS: [(u64, i32, i64, i64); 6] = [
 #[test]
 fn demo_matches_original() {
     let shared = Arc::new(Mutex::new(Shared::default()));
-    let mut xq = Xq::new(shared.clone(), Xq::new_mixer(), 0);
+    let mut xq = XQuest::new(shared.clone(), XQuest::new_mixer(), 0);
 
     let mut exec = FrameExecutor::new(async move {
-        xq.initialise_variables();
-        assert!(xq.set_demo_file("xquest.dmo"));
-        xq.play_demo().await;
+        xq.play_demo(assets::builtin_demo()).await;
     });
 
     let mut frame = 0;
@@ -35,6 +34,10 @@ fn demo_matches_original() {
         }
 
         let st = shared.lock().unwrap().status;
-        assert_eq!((st.total_level, st.time_on_level, st.score), (level, time, score), "at frame {f}");
+        assert_eq!(
+            (st.total_level, st.time_on_level, st.score),
+            (level, time, score),
+            "at frame {f}"
+        );
     }
 }

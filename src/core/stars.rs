@@ -1,7 +1,7 @@
-//! The menu starfield, ported from `starunit.pas`.
+//! The starfield behind the menus.
 
-use crate::core::tp::TpRandom;
-use crate::core::vga::Vga;
+use crate::core::rng::Rng;
+use crate::core::vga::{Page, Vga};
 
 pub const MAX_STARS: usize = 400;
 const SPEED: i32 = 128;
@@ -27,21 +27,35 @@ pub struct Stars {
 }
 
 impl Stars {
-    fn init_star(rng: &mut TpRandom) -> Star {
-        let x = -5000 + rng.int(10000);
-        let y = -5000 + rng.int(10000);
-        let z = rng.int(12000) + 256;
-        Star { x, y, z, xz: 1, yz: 1, c: 0 }
+    fn init_star(rng: &mut Rng) -> Star {
+        let x = -5000 + rng.below(10000);
+        let y = -5000 + rng.below(10000);
+        let z = rng.below(12000) + 256;
+        Star {
+            x,
+            y,
+            z,
+            xz: 1,
+            yz: 1,
+            c: 0,
+        }
     }
 
-    fn new_star(rng: &mut TpRandom) -> Star {
-        let x = -8191 + rng.int(16383);
-        let y = -8191 + rng.int(16383);
-        let z = rng.int(1256) + 14500;
-        Star { x, y, z, xz: 1, yz: 1, c: 0 }
+    fn new_star(rng: &mut Rng) -> Star {
+        let x = -8191 + rng.below(16383);
+        let y = -8191 + rng.below(16383);
+        let z = rng.below(1256) + 14500;
+        Star {
+            x,
+            y,
+            z,
+            xz: 1,
+            yz: 1,
+            c: 0,
+        }
     }
 
-    pub fn init(&mut self, rng: &mut TpRandom) {
+    pub fn start(&mut self, rng: &mut Rng) {
         if self.initialised {
             return;
         }
@@ -49,17 +63,15 @@ impl Stars {
         self.initialised = true;
     }
 
-    pub fn finished(&mut self) {
+    pub fn stop(&mut self) {
         self.initialised = false;
     }
 
-    /// Moves every star one step (`StarFieldStepNoVSync`).
-    pub fn step(&mut self, vga: &mut Vga, rng: &mut TpRandom) {
+    /// Moves every star one step towards the viewer.
+    pub fn step(&mut self, vga: &mut Vga, rng: &mut Rng) {
         if !self.initialised {
             return;
         }
-
-        let page = vga.visible_page_offs;
 
         for s in self.star.iter_mut() {
             if s.xz < 0 || s.yz < 0 || s.xz > XWIDTH || s.yz > YWIDTH {
@@ -68,7 +80,7 @@ impl Stars {
             }
 
             if s.c != 0 {
-                vga.put_pix(s.xz, s.yz, page, 0);
+                vga.set_pixel(s.xz, s.yz, Page::Visible, 0);
             }
 
             s.z = (s.z - SPEED) as i16 as i32;
@@ -87,16 +99,18 @@ impl Stars {
 
             s.c = 31 - (s.z as u16 >> 9) as i32;
 
-            if vga.get_pix(s.xz, s.yz, 0) != 0 {
+            // Stars only appear over black, judged on the first page.
+            if vga.pixel(s.xz, s.yz, Page::Page0) != 0 {
                 s.c = 0;
             } else {
-                vga.put_pix(s.xz, s.yz, page, s.c as u8);
+                vga.set_pixel(s.xz, s.yz, Page::Visible, s.c as u8);
             }
         }
     }
 
-    /// `ResetStars`: forget stars inside a rectangle that is about to be cleared.
-    pub fn reset(&mut self, x1: i32, y1: i32, x2: i32, y2: i32) {
+    /// Forgets the stars inside a rectangle that is about to be cleared, so they are not
+    /// erased over whatever is drawn there.
+    pub fn forget(&mut self, x1: i32, y1: i32, x2: i32, y2: i32) {
         for s in self.star.iter_mut() {
             if s.xz > x1 && s.xz < x2 && s.yz > y1 && s.yz < y2 {
                 s.c = 0;

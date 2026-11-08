@@ -1,15 +1,15 @@
-//! Persistent storage for the configuration, high scores and recorded demos.
+//! Persistent storage for the settings, high scores and recorded demos, which are all text.
 //!
-//! Natively these are files in the current directory, as in the original. On the web they
-//! are kept in the browser's local storage.
+//! Natively these are files in the current directory. On the web they are kept in the
+//! browser's local storage.
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
-    pub fn load(name: &str) -> Option<Vec<u8>> {
-        std::fs::read(name).ok()
+    pub fn load(name: &str) -> Option<String> {
+        std::fs::read_to_string(name).ok()
     }
 
-    pub fn save(name: &str, data: &[u8]) -> bool {
+    pub fn save(name: &str, data: &str) -> bool {
         std::fs::write(name, data).is_ok()
     }
 
@@ -27,7 +27,9 @@ mod imp {
     }
 
     pub fn random_seed() -> u32 {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
         (now.as_millis() as u64 ^ (now.as_nanos() as u64 >> 20)) as u32
     }
 }
@@ -40,18 +42,20 @@ mod imp {
         web_sys::window()?.local_storage().ok()?
     }
 
-    pub fn load(name: &str) -> Option<Vec<u8>> {
-        let hex = storage()?.get_item(&format!("{PREFIX}{name}")).ok()??;
-        (0..hex.len() / 2).map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok()).collect()
+    pub fn load(name: &str) -> Option<String> {
+        storage()?.get_item(&format!("{PREFIX}{name}")).ok()?
     }
 
-    pub fn save(name: &str, data: &[u8]) -> bool {
-        let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
-        storage().map(|s| s.set_item(&format!("{PREFIX}{name}"), &hex).is_ok()).unwrap_or(false)
+    pub fn save(name: &str, data: &str) -> bool {
+        storage()
+            .map(|s| s.set_item(&format!("{PREFIX}{name}"), data).is_ok())
+            .unwrap_or(false)
     }
 
     pub fn list(extension: &str) -> Vec<String> {
-        let Some(s) = storage() else { return Vec::new() };
+        let Some(s) = storage() else {
+            return Vec::new();
+        };
         let len = s.length().unwrap_or(0);
         let mut names: Vec<String> = (0..len)
             .filter_map(|i| s.key(i).ok().flatten())
